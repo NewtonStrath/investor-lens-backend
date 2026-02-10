@@ -1,17 +1,19 @@
 # backend/main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
-from pydantic import BaseModel
-from datetime import datetime
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List, Optional, Dict
+from datetime import datetime
 import cv2
-from typing import Optional
-from threading import Lock
+import threading
+import asyncio
+
 # -------------------------------
 # Pydantic Models
 # -------------------------------
+
 class Location(BaseModel):
     lat: float
     lng: float
@@ -24,10 +26,6 @@ class User(BaseModel):
     status: str
     lastLogin: str
     avatar: str
-
-class Location(BaseModel):
-    lat: float
-    lng: float
 
 class Violation(BaseModel):
     id: str
@@ -53,8 +51,7 @@ class Vehicle(BaseModel):
     locationName: Optional[str] = None
     speed: Optional[float] = 0.0
     violations: List[Violation] = []
-    fuelLevel: Optional[float] = 0.0  # New field, in liters
-
+    fuelLevel: Optional[float] = 0.0  # in liters
 
 class Driver(BaseModel):
     id: str
@@ -122,14 +119,19 @@ class KPI(BaseModel):
     trend: str
     period: str
 
+class VehicleLocationUpdate(BaseModel):
+    lat: float
+    lng: float
+    speed: Optional[float] = None
+    fuelLevel: Optional[float] = None
+
 # -------------------------------
 # Mock Data
 # -------------------------------
+
 users = [
     {"id":"u1","name":"Alex Mwangi","email":"alex@fleetpulse.com","role":"Admin","status":"Active","lastLogin":"2023-10-25T08:30:00Z","avatar":"https://i.pravatar.cc/150?u=u1"},
     {"id":"u2","name":"Sarah Okafor","email":"sarah@fleetpulse.com","role":"Dispatcher","status":"Active","lastLogin":"2023-10-25T09:15:00Z","avatar":"https://i.pravatar.cc/150?u=u2"},
-    {"id":"u3","name":"David Kimani","email":"david@fleetpulse.com","role":"Finance Manager","status":"Active","lastLogin":"2023-10-24T16:45:00Z","avatar":"https://i.pravatar.cc/150?u=u3"},
-    {"id":"u4","name":"Grace Njoroge","email":"grace@fleetpulse.com","role":"Viewer","status":"Inactive","lastLogin":"2023-09-30T10:00:00Z","avatar":"https://i.pravatar.cc/150?u=u4"}
 ]
 
 vehicles = [
@@ -330,81 +332,43 @@ vehicles = [
     }
 ]
 
-
-
 drivers = [
     {"id":"d1","name":"John Kamau","licenseNumber":"DL123456","licenseExpiry":"2025-05-20","phone":"+254 712 345 678","status":"On Trip","assignedVehicleId":"v1","totalTrips":145,"totalDistance":45000,"rating":4.8,"avatar":"https://i.pravatar.cc/150?u=d1","joinedDate":"2021-03-15"},
-    {"id":"d2","name":"Peter Omondi","licenseNumber":"DL234567","licenseExpiry":"2024-01-15","phone":"+254 723 456 789","status":"Active","assignedVehicleId":"v2","totalTrips":98,"totalDistance":32000,"rating":4.5,"avatar":"https://i.pravatar.cc/150?u=d2","joinedDate":"2021-06-10"},
-    {"id":"d3","name":"Mary Wanjiku","licenseNumber":"DL345678","licenseExpiry":"2025-09-12","phone":"+254 734 567 890","status":"Active","assignedVehicleId":"v3","totalTrips":120,"totalDistance":40000,"rating":4.7,"avatar":"https://i.pravatar.cc/150?u=d3","joinedDate":"2020-11-05"},
-    {"id":"d4","name":"James Mwangi","licenseNumber":"DL456789","licenseExpiry":"2024-07-30","phone":"+254 745 678 901","status":"On Trip","assignedVehicleId":"v4","totalTrips":85,"totalDistance":28000,"rating":4.4,"avatar":"https://i.pravatar.cc/150?u=d4","joinedDate":"2021-02-20"},
-    {"id":"d5","name":"Alice Njeri","licenseNumber":"DL567890","licenseExpiry":"2026-03-22","phone":"+254 756 789 012","status":"Active","assignedVehicleId":"v5","totalTrips":110,"totalDistance":37000,"rating":4.6,"avatar":"https://i.pravatar.cc/150?u=d5","joinedDate":"2021-08-14"},
-    {"id":"d6","name":"Samuel Karanja","licenseNumber":"DL678901","licenseExpiry":"2025-12-05","phone":"+254 767 890 123","status":"Active","assignedVehicleId":"v6","totalTrips":95,"totalDistance":31000,"rating":4.5,"avatar":"https://i.pravatar.cc/150?u=d6","joinedDate":"2022-01-10"},
-    {"id":"d7","name":"Grace Chebet","licenseNumber":"DL789012","licenseExpiry":"2025-06-18","phone":"+254 778 901 234","status":"On Trip","assignedVehicleId":"v7","totalTrips":130,"totalDistance":42000,"rating":4.8,"avatar":"https://i.pravatar.cc/150?u=d7","joinedDate":"2020-12-01"},
-    {"id":"d8","name":"David Otieno","licenseNumber":"DL890123","licenseExpiry":"2024-11-09","phone":"+254 789 012 345","status":"Active","assignedVehicleId":"v8","totalTrips":75,"totalDistance":25000,"rating":4.3,"avatar":"https://i.pravatar.cc/150?u=d8","joinedDate":"2022-03-22"},
-    {"id":"d9","name":"Faith Achieng","licenseNumber":"DL901234","licenseExpiry":"2025-10-14","phone":"+254 790 123 456","status":"Active","assignedVehicleId":"v9","totalTrips":105,"totalDistance":36000,"rating":4.6,"avatar":"https://i.pravatar.cc/150?u=d9","joinedDate":"2021-09-30"},
-    {"id":"d10","name":"Michael Odhiambo","licenseNumber":"DL012345","licenseExpiry":"2026-01-25","phone":"+254 701 234 567","status":"On Trip","assignedVehicleId":"v10","totalTrips":115,"totalDistance":39000,"rating":4.7,"avatar":"https://i.pravatar.cc/150?u=d10","joinedDate":"2020-10-18"}
+    {"id":"d2","name":"Mary Wanjiku","licenseNumber":"DL234567","licenseExpiry":"2026-01-15","phone":"+254 723 456 789","status":"Available","assignedVehicleId":"v2","totalTrips":120,"totalDistance":38000,"rating":4.6,"avatar":"https://i.pravatar.cc/150?u=d2","joinedDate":"2021-07-22"},
+    {"id":"d3","name":"Peter Otieno","licenseNumber":"DL345678","licenseExpiry":"2025-11-10","phone":"+254 734 567 890","status":"Maintenance","assignedVehicleId":"v3","totalTrips":160,"totalDistance":50000,"rating":4.7,"avatar":"https://i.pravatar.cc/150?u=d3","joinedDate":"2020-12-05"},
+    {"id":"d4","name":"Lucy Achieng","licenseNumber":"DL456789","licenseExpiry":"2026-03-12","phone":"+254 745 678 901","status":"On Trip","assignedVehicleId":"v4","totalTrips":90,"totalDistance":25000,"rating":4.5,"avatar":"https://i.pravatar.cc/150?u=d4","joinedDate":"2022-01-20"},
+    {"id":"d5","name":"Michael Njoroge","licenseNumber":"DL567890","licenseExpiry":"2025-09-18","phone":"+254 756 789 012","status":"Available","assignedVehicleId":"v5","totalTrips":110,"totalDistance":30000,"rating":4.6,"avatar":"https://i.pravatar.cc/150?u=d5","joinedDate":"2021-05-11"},
+    {"id":"d6","name":"Grace Mwende","licenseNumber":"DL678901","licenseExpiry":"2026-05-25","phone":"+254 767 890 123","status":"On Trip","assignedVehicleId":"v6","totalTrips":140,"totalDistance":42000,"rating":4.7,"avatar":"https://i.pravatar.cc/150?u=d6","joinedDate":"2020-10-30"},
+    {"id":"d7","name":"David Kiptoo","licenseNumber":"DL789012","licenseExpiry":"2025-12-05","phone":"+254 778 901 234","status":"Maintenance","assignedVehicleId":"v7","totalTrips":130,"totalDistance":39000,"rating":4.6,"avatar":"https://i.pravatar.cc/150?u=d7","joinedDate":"2021-03-18"},
+    {"id":"d8","name":"Faith Nyambura","licenseNumber":"DL890123","licenseExpiry":"2026-02-14","phone":"+254 789 012 345","status":"Available","assignedVehicleId":"v8","totalTrips":100,"totalDistance":27000,"rating":4.5,"avatar":"https://i.pravatar.cc/150?u=d8","joinedDate":"2022-02-12"},
+    {"id":"d9","name":"Samuel Kariuki","licenseNumber":"DL901234","licenseExpiry":"2025-08-30","phone":"+254 790 123 456","status":"On Trip","assignedVehicleId":"v9","totalTrips":150,"totalDistance":46000,"rating":4.8,"avatar":"https://i.pravatar.cc/150?u=d9","joinedDate":"2021-06-25"},
+    {"id":"d10","name":"Angela Chebet","licenseNumber":"DL012345","licenseExpiry":"2026-04-20","phone":"+254 701 234 567","status":"Available","assignedVehicleId":"v10","totalTrips":95,"totalDistance":24000,"rating":4.6,"avatar":"https://i.pravatar.cc/150?u=d10","joinedDate":"2022-05-01"}
 ]
 
 
-trips = [
-    {"id":"t1","origin":"Nairobi","destination":"Mombasa","cargoType":"Electronics","distance":480,"expectedDuration":"8h 30m","vehicleId":"v1","driverId":"d1","status":"In Progress","startDate":"2023-10-25T06:00:00Z","cost":45000}
-]
+trips = []
+fuel_records = []
+maintenance_records = []
+notifications = []
+kpis = []
 
-fuel_records = [
-    {"id":"f1","date":"2023-10-25","vehicleId":"v1","driverId":"d1","quantity":150,"cost":27000,"location":"Shell Mombasa Rd","tripId":"t1","efficiency":3.2,"isAnomaly":False}
-]
+# -------------------------------
+# Global variables
+# -------------------------------
 
-maintenance_records = [
-    {"id":"m1","vehicleId":"v3","date":"2023-10-20","type":"Routine","description":"Oil change and filter replacement","cost":25000,"provider":"AutoExpress","status":"Completed"}
-]
+vehicle_clients: Dict[str, list[WebSocket]] = {}  # per vehicle
+all_vehicle_clients: List[WebSocket] = []         # for /all
+vehicle_lock = threading.Lock()
 
-notifications = [
-    {"id":"n1","type":"Warning","title":"Maintenance Overdue","message":"Vehicle KBD 789C is overdue for maintenance by 5 days.","timestamp":"2h ago","read":False,"category":"Maintenance"}
-]
-
-kpis = [
-    {"label":"Total Trips","value":124,"change":12,"trend":"up","period":"this month"},
-    {"label":"Active Vehicles","value":"6/8","change":-5,"trend":"down","period":"vs last week"}
-]
-
-# Global dict to track camera threads per vehicle
+# Camera threads
 camera_threads = {}
-camera_locks = {}
-
-lock = Lock()
-
-
-
-def generate_frames(vehicle_id):
-    cap = cv2.VideoCapture(0)  # Use 0 for default webcam
-    while camera_threads.get(vehicle_id, False):
-        success, frame = cap.read()
-        if not success:
-            break
-        # Encode frame as JPEG
-        ret, buffer = cv2.imencode(".jpg", frame)
-        frame_bytes = buffer.tobytes()
-        yield (b"--frame\r\n"
-               b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
-    cap.release()
-    # print(f"Camera feed for {vehicle_id} stopped.")
-
-# Lock to safely update vehicle locations
-vehicle_lock = Lock()
-
-# Pydantic model for location update
-class VehicleLocationUpdate(BaseModel):
-    lat: float
-    lng: float
-    speed: Optional[float] = None  # Optional: update speed
-    fuelLevel: Optional[float] = None  # Optional: update fuel level
 
 # -------------------------------
 # FastAPI App
 # -------------------------------
+
 app = FastAPI(title="FleetPulse API")
 
-# Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -412,10 +376,11 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# -------------------------------
-# API Prefix "/api"
-# -------------------------------
 API_PREFIX = "/api"
+
+# -------------------------------
+# REST Endpoints
+# -------------------------------
 
 @app.get(f"{API_PREFIX}/users", response_model=List[User])
 def get_users():
@@ -453,14 +418,27 @@ def get_kpis():
 def health_check():
     return {"status": "ok", "timestamp": datetime.utcnow()}
 
-# Endpoint to start camera feed
+# -------------------------------
+# Camera Feed
+# -------------------------------
+
+def generate_frames(vehicle_id):
+    cap = cv2.VideoCapture(0)
+    while camera_threads.get(vehicle_id, False):
+        success, frame = cap.read()
+        if not success:
+            break
+        ret, buffer = cv2.imencode(".jpg", frame)
+        frame_bytes = buffer.tobytes()
+        yield (b"--frame\r\n"
+               b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+    cap.release()
+
 @app.get("/api/vehicle/{vehicle_id}/camera_feed")
 def camera_feed(vehicle_id: str):
-    # Mark camera as running
     camera_threads[vehicle_id] = True
     return StreamingResponse(generate_frames(vehicle_id), media_type="multipart/x-mixed-replace; boundary=frame")
 
-# Endpoint to stop camera feed
 @app.post("/api/vehicle/{vehicle_id}/camera_feed/stop")
 def stop_camera_feed(vehicle_id: str):
     camera_threads[vehicle_id] = False
@@ -471,20 +449,13 @@ def stop_camera_feed(vehicle_id: str):
 @app.post("/api/vehicle/{vehicle_id}/update_location")
 def update_vehicle_location(vehicle_id: str, update: VehicleLocationUpdate):
     with vehicle_lock:
-        # Find the vehicle
         vehicle = next((v for v in vehicles if v["id"] == vehicle_id), None)
         if not vehicle:
             raise HTTPException(status_code=404, detail="Vehicle not found")
-
-        # Update location
         vehicle["location"]["lat"] = update.lat
         vehicle["location"]["lng"] = update.lng
-
-        # Optionally update speed
         if update.speed is not None:
             vehicle["speed"] = update.speed
-
-        # Optionally update fuel level
         if update.fuelLevel is not None:
             vehicle["fuelLevel"] = update.fuelLevel
 
@@ -492,5 +463,3 @@ def update_vehicle_location(vehicle_id: str, update: VehicleLocationUpdate):
         # vehicle["locationName"] = reverse_geocode(update.lat, update.lng)
 
     return {"status": "success", "vehicle_id": vehicle_id, "new_location": vehicle["location"]}
-
-
