@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="UltimateRestHistory">
+    <items>
+      <historyItem>
+        <option name="timestamp" value="1771593838283" />
+        <request method="POST" url="http://localhost:8000/register">
+          <bodyContent>{
+  &quot;name&quot; : &quot;test&quot;,
+  &quot;email&quot; : &quot;test@gmail.com&quot;,
+  &quot;password&quot; : &quot;test@123&quot;
+}</bodyContent>
+        </request>
+      </historyItem>
+      <historyItem>
+        <option name="timestamp" value="1771593755339" />
+        <request method="POST" url="http://localhost:8000/register">
+          <bodyContent>{
+  &quot;name&quot; : &quot;test&quot;,
+  &quot;email&quot; : &quot;test@gmail.com&quot;,
+  &quot;password&quot; : &quot;test@123&quot;
+}</bodyContent>
+        </request>
+      </historyItem>
+      <historyItem>
+        <option name="timestamp" value="1771593597338" />
+        <request method="POST" url="http://localhost:8000/register">
+          <bodyContent>{
+  &quot;name&quot; : &quot;test&quot;,
+  &quot;email&quot; : &quot;test@gmail.com&quot;,
+  &quot;password&quot; : &quot;test@123&quot;
+}</bodyContent>
+        </request>
+      </historyItem>
+      <historyItem>
+        <option name="timestamp" value="1771593443556" />
+        <request method="POST" url="http://localhost:8000/register">
+          <bodyContent>{
+  &quot;name&quot; : &quot;test&quot;,
+  &quot;email&quot; : &quot;test@gmail.com&quot;,
+  &quot;password&quot; : &quot;test@123&quot;
+}</bodyContent>
+        </request>
+      </historyItem>
+    </items>
+  </component>
+</project>

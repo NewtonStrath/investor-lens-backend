@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="UltimateRestCollectionService">
+    <option name="rootNodes">
+      <list>
+        <node id="b4ca986e-b1f5-463d-9ea2-a120d70856f0" name="Default Collection" isFolder="true">
+          <option name="folder" value="true" />
+          <children>
+            <node id="5e0d720d-eb66-4c83-8790-f2e685912a7b" name="Rgeister Account">
+              <request name="Rgeister Account" method="POST" url="http://localhost:8000/register">
+                <bodyContent>{
+  &quot;name&quot; : &quot;test&quot;,
+  &quot;email&quot; : &quot;test@gmail.com&quot;,
+  &quot;password&quot; : &quot;test@123&quot;
+}</bodyContent>
+              </request>
+            </node>
+          </children>
+        </node>
+      </list>
+    </option>
+  </component>
+</project>
