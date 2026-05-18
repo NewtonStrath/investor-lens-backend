@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta
 
+from dotenv import load_dotenv
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from db import get_db, User
 from model import Recommendation
+
+load_dotenv()
 
 pwd_context = CryptContext(
     schemes=["argon2"],
@@ -26,7 +29,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # ---------------- JWT CONFIG ----------------
-JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key")
+_jwt_secret = os.getenv("JWT_SECRET")
+if not _jwt_secret:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is not set. "
+        "Add it to your .env file before starting the server."
+    )
+JWT_SECRET = _jwt_secret
 JWT_ALGORITHM = "HS256"
 JWT_EXP_MINUTES = 60
 

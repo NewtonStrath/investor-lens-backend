@@ -58,4 +58,4 @@ class RecommendationResponse(BaseModel):
     recommendations: List[Recommendation]
 
 class ProcessRequest(BaseModel):
-    customer_id: str
+    customer_id: int

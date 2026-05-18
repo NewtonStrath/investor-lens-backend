@@ -90,7 +90,7 @@ poetry.lock
 
 # dotenv
 .env
-.env.*
+.env
 
 # virtualenv
 venv/

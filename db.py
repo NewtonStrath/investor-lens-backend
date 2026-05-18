@@ -1,10 +1,17 @@
+import os
 from datetime import datetime
 
+from dotenv import load_dotenv
 from sqlalchemy import Column, Integer, String, ForeignKey, Date, create_engine, Float, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+load_dotenv()
+
 # ---------------- DATABASE ----------------
-DATABASE_URL = "postgresql+psycopg2://investor_lens_user:StrongInvestorLens%40123@localhost:5432/investor_lens_db"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://investor_lens_user:StrongInvestorLens%40123@localhost:5432/investor_lens_db"
+)
 
 engine = create_engine(
     DATABASE_URL,
@@ -36,7 +43,7 @@ class ScoreMetricDB(Base):
     __tablename__ = "score_metrics"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
     category = Column(String)
     metric_label = Column(String)
     value = Column(Integer)
@@ -59,20 +66,47 @@ class CDRFeatureDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     customer_id = Column(Integer, index=True)
 
+    # Raw aggregated features
     total_calls = Column(Integer)
     avg_call_duration = Column(Float)
     unique_contacts = Column(Integer)
+
+    # ML-derived score (0-100)
+    cdr_score = Column(Float, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class TransactionFeatureDB(Base):
     __tablename__ = "transaction_features"
 
     id = Column(Integer, primary_key=True, index=True)
-
     customer_id = Column(Integer, index=True, nullable=False)
 
+    # Raw aggregated features
     total_transactions = Column(Integer, nullable=False)
     total_amount = Column(Float, nullable=False)
     avg_transaction = Column(Float, nullable=False)
 
+    # ML-derived score (0-100)
+    tx_score = Column(Float, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class BehavioralFeatureDB(Base):
+    __tablename__ = "behavioral_features"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, index=True, nullable=False)
+    behavioral_score = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MLScoreDB(Base):
+    __tablename__ = "ml_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, index=True, nullable=False)
+    score = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
